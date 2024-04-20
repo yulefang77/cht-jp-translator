@@ -3,20 +3,17 @@ from flask import Flask, request, abort
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
-    Configuration,
-    ApiClient,
-    MessagingApi,
-    ReplyMessageRequest,
-    TextMessage
+    Configuration, ApiClient, MessagingApi,
+    ReplyMessageRequest, TextMessage
 )
 from linebot.v3.webhooks import (
-    MessageEvent,
-    TextMessageContent
+    MessageEvent, TextMessageContent
 )
 from openai import OpenAI
 
 ACCESS_TOKEN = os.environ.get('ACCESS_TOKEN')
 CHANNEL_SECRET = os.environ.get('CHANNEL_SECRET')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 TO_YOSHIO = os.environ.get('TO_YOSHIO')
 TO_YUTO = os.environ.get('TO_YUTO')
 YOSHIO = os.environ.get('YOSHIO')
@@ -52,44 +49,63 @@ def handle_message(event):
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         user_text = event.message.text
+        user_id = event.source.user_id
 
-        try:
-            user_id = event.source.user_id
-            profile = line_bot_api.get_profile(user_id)
-            user_name = profile.display_name
+        if event.source.type == 'group':
+            try:
+                profile = line_bot_api.get_group_member_profile(event.source.group_id, user_id)
+                user_name = profile.display_name
+                print('Successfully obtained user id in group.')
+            except Exception as e:
+                print("Exception when calling MessagingApi->get_profile: %s\n" % e)
+        elif event.source.type == 'user':
+            try:
+                profile = line_bot_api.get_profile(user_id)
+                user_name = profile.display_name
+                print('Successfully obtained user id.')
+            except Exception as e:
+                print("Exception when calling MessagingApi->get_profile: %s\n" % e)
+        else:
+            print("Unexpected event.source.type: " + event.source.type)
 
-            print('user id: ' + user_id)
-            print('user_name: ' + user_name)
-        except Exception as e:
-            print("Exception when calling MessagingApi->get_profile: %s\n" % e)
-            return
-
-        nagata = [YUTO, YOSHIO]
+        nagada = [YUTO, YOSHIO]
         
-        if user_name not in nagata:
-            if user_text.startswith(TO_YUTO) or user_text.startswith(TO_YOSHIO):            
+        if user_name in nagada:
+            print('you are in nagada.')
+            try:
                 client = OpenAI()
                 completion = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
-                        {"role": "system", "content": "你是位翻譯員，請將使用者輸入的中文翻譯成日文。"},
+                        {"role": "system", "content": "你是位翻譯員，請將使用者輸入的日文翻譯成中文。"\
+                                                        "使用正體中文字，勿使用簡體字。翻譯文字內容就好，"\
+                                                        "不用針對內容發表建議。"},
                         {"role": "user", "content": user_text}
                     ]
                 )
                 msg = completion.choices[0].message.content
+            except Exception as e:
+                print("Exception when calling OpenAI API: %s\n" % e)
+                msg = "抱歉，處理您的請求時出現了問題。請稍後再試。"
+        else:
+            print('you are not in nagada.')           
+            if user_text.startswith(TO_YUTO) or user_text.startswith(TO_YOSHIO):
+                try:            
+                    client = OpenAI()
+                    completion = client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": "你是位翻譯員，請將使用者輸入的中文翻譯成日文。"\
+                                                            "翻譯文字內容就好，不用針對內容發表建議。"},
+                            {"role": "user", "content": user_text}
+                        ]
+                    )
+                    msg = completion.choices[0].message.content
+                except Exception as e:
+                    print("Exception when calling OpenAI API: %s\n" % e)
+                    msg = "抱歉，處理您的請求時出現了問題。請稍後再試。"
             else:
                 return
-
-        if user_name == YUTO or user_name == YOSHIO:            
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "你是位翻譯員，請將使用者輸入的日文翻譯成中文。使用正體中文字，勿使用簡體字。"},
-                    {"role": "user", "content": user_text}
-                ]
-            )
-            msg = completion.choices[0].message.content
             
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(
@@ -101,5 +117,3 @@ def handle_message(event):
 
 if __name__ == "__main__":
     app.run()
-
-# Switched to branch 'heroku-deploy'
