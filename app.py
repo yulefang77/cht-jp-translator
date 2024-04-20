@@ -64,20 +64,21 @@ def handle_message(event):
             print("Exception when calling MessagingApi->get_profile: %s\n" % e)
             return
 
-        if user_id != YUTO and user_id != YOSHIO:
-            if not user_text.startswith(TO_YUTO) and not user_text.startswith(TO_YOSHIO):
-                return  
-
-        if user_text.startswith(TO_YUTO) or user_text.startswith(TO_YOSHIO):            
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "你是位翻譯員，請將使用者輸入的中文翻譯成日文。"},
-                    {"role": "user", "content": user_text}
-                ]
-            )
-            msg = completion.choices[0].message.content
+        nagata = [YUTO, YOSHIO]
+        
+        if user_name not in nagata:
+            if user_text.startswith(TO_YUTO) or user_text.startswith(TO_YOSHIO):            
+                client = OpenAI()
+                completion = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "你是位翻譯員，請將使用者輸入的中文翻譯成日文。"},
+                        {"role": "user", "content": user_text}
+                    ]
+                )
+                msg = completion.choices[0].message.content
+            else:
+                return
 
         if user_name == YUTO or user_name == YOSHIO:            
             client = OpenAI()
